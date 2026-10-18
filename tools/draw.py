@@ -1,7 +1,9 @@
 """랜덤 추출. 시드와 결과를 draws.log에 남긴다.
 
-  python tools/draw.py problems 5             # 아직 정리 안 된 기출 문항 5개
-  python tools/draw.py logics 3 --target 공통   # 목표 문항에 허용되는 논리 카드 3개
+  python tools/draw.py problems 5                        # 아직 정리 안 된 기출 문항 5개
+  python tools/draw.py problems 3 --subject 미적분        # 미적분 기출에서만 3개
+  python tools/draw.py logics 1 --target 공통              # 목표 문항에 허용되는 논리 카드 1개
+  python tools/draw.py logics 1 --target 미적분 --area 미적분  # 허용 카드 중 미적분 영역 카드에서만 1개
 """
 import argparse, csv, datetime, glob, os, random, re, sys
 
@@ -39,23 +41,26 @@ def main():
     ap.add_argument("n", type=int)
     ap.add_argument("--target", choices=list(ALLOWED))
     ap.add_argument("--exclude", default="", help="쉼표로 구분한 제외 ID")
+    ap.add_argument("--subject", help="problems: 이 과목(공통/미적분/확통)의 기출에서만 뽑는다")
+    ap.add_argument("--area", help="logics: 영역에 이 값이 들어 있는 카드에서만 뽑는다(보장 추출용)")
     a = ap.parse_args()
     seed = int.from_bytes(os.urandom(4), "big")
     rng = random.Random(seed)
     excl = {x for x in a.exclude.split(",") if x}
     if a.kind == "problems":
         with open(os.path.join(ROOT, "pool.csv"), encoding="utf-8") as fp:
-            pool = [r["id"] for r in csv.DictReader(fp)]
+            pool = [r["id"] for r in csv.DictReader(fp) if not a.subject or r["subject"] == a.subject]
         cand = [p for p in pool if p not in done_problems() and p not in excl]
         picked = rng.sample(cand, a.n)
         out = picked
     else:
         if not a.target:
             sys.exit("--target 필요")
-        cand = [c for c in cards() if c[1] and c[1] <= ALLOWED[a.target] and c[0] not in excl]
+        cand = [c for c in cards() if c[1] and c[1] <= ALLOWED[a.target] and c[0] not in excl
+                and (not a.area or a.area in c[1])]
         picked = rng.sample(cand, min(a.n, len(cand)))
         out = [f"{c[0]} [{','.join(sorted(c[1]))}] {c[2]}" for c in picked]
-    log(f"{a.kind} n={a.n} target={a.target} exclude={sorted(excl)} seed={seed} pool={len(cand)} -> {[o.split()[0] for o in out]}")
+    log(f"{a.kind} n={a.n} target={a.target} subject={a.subject} area={a.area} exclude={sorted(excl)} seed={seed} pool={len(cand)} -> {[o.split()[0] for o in out]}")
     print(f"seed={seed} 후보 {len(cand)}개")
     print("\n".join(out))
 
