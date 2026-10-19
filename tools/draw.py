@@ -38,6 +38,14 @@ def cards():
     return out
 
 
+def points(row):
+    """문항 번호로 배점을 정한다(pool.csv에 배점이 없다). 공통 9~15·20~22번, 미적분 28~30번이 4점."""
+    n = int(row["num"])
+    if row["subject"] == "공통":
+        return 4 if 9 <= n <= 15 or 20 <= n <= 22 else (2 if n <= 2 else 3)
+    return 4 if n >= 28 else (2 if n == 23 else 3)
+
+
 def problem_logics(pid):
     text = open(os.path.join(ROOT, "problems", f"{pid}.md"), encoding="utf-8").read()
     m = re.search(r"^logics:\s*\[(.*?)\]", text, re.M)
@@ -50,6 +58,7 @@ def main():
     ap.add_argument("n", type=int)
     ap.add_argument("--target", choices=list(ALLOWED))
     ap.add_argument("--exclude", default="", help="쉼표로 구분한 제외 ID")
+    ap.add_argument("--points", type=int, help="problems: 이 배점의 기출에서만 뽑는다(일괄 정리용)")
     ap.add_argument("--from", dest="src", default="", help="cards: 쉼표로 구분한 정리된 기출 ID")
     ap.add_argument("--area", help="logics: 영역에 이 값이 들어 있는 카드에서만 뽑는다(보장 추출용)")
     a = ap.parse_args()
@@ -58,7 +67,8 @@ def main():
     excl = {x for x in a.exclude.split(",") if x}
     if a.kind == "problems":
         with open(os.path.join(ROOT, "pool.csv"), encoding="utf-8") as fp:
-            pool = [r["id"] for r in csv.DictReader(fp) if r["subject"] in SUBJECTS]
+            pool = [r["id"] for r in csv.DictReader(fp) if r["subject"] in SUBJECTS
+                    and (not a.points or points(r) == a.points)]
         cand = [p for p in pool if p not in done_problems() and p not in excl]
         picked = rng.sample(cand, a.n)
         out = picked
@@ -90,7 +100,7 @@ def main():
                 and (not a.area or a.area in c[1])]
         picked = rng.sample(cand, min(a.n, len(cand)))
         out = [f"{c[0]} [{','.join(sorted(c[1]))}] {c[2]}" for c in picked]
-    log(f"{a.kind} n={a.n} target={a.target} area={a.area} exclude={sorted(excl)} seed={seed} pool={len(cand)} -> {[o.split()[0] for o in out]}")
+    log(f"{a.kind} n={a.n} target={a.target} area={a.area} points={a.points} exclude={sorted(excl)} seed={seed} pool={len(cand)} -> {[o.split()[0] for o in out]}")
     print(f"seed={seed} 후보 {len(cand)}개")
     print("\n".join(out))
 
