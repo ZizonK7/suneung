@@ -1,7 +1,7 @@
 """랜덤 추출. 시드와 결과를 draws.log에 남긴다.
 
   python tools/draw.py problems 5                        # 아직 정리 안 된 기출 문항 5개
-  python tools/draw.py problems 3 --subject 미적분        # 미적분 기출에서만 3개
+  python tools/draw.py main 1                            # 제작 문항의 메인 영역(수1/수2/미적분) 1개
   python tools/draw.py logics 1 --target 공통              # 목표 문항에 허용되는 논리 카드 1개
   python tools/draw.py logics 1 --target 미적분 --area 미적분  # 허용 카드 중 미적분 영역 카드에서만 1개
 """
@@ -13,6 +13,7 @@ ALLOWED = {  # 목표 문항 -> 쓸 수 있는 논리 영역
     "미적분": {"기초", "수1", "수2", "미적분"},
     "확통": {"기초", "확통"},  # 수1·수2 허용 여부 미정
 }
+MAIN = ["수1", "수2", "미적분"]  # 제작 문항의 메인 영역 후보
 
 
 def log(line):
@@ -37,11 +38,10 @@ def cards():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("kind", choices=["problems", "logics"])
+    ap.add_argument("kind", choices=["problems", "logics", "main"])
     ap.add_argument("n", type=int)
     ap.add_argument("--target", choices=list(ALLOWED))
     ap.add_argument("--exclude", default="", help="쉼표로 구분한 제외 ID")
-    ap.add_argument("--subject", help="problems: 이 과목(공통/미적분/확통)의 기출에서만 뽑는다")
     ap.add_argument("--area", help="logics: 영역에 이 값이 들어 있는 카드에서만 뽑는다(보장 추출용)")
     a = ap.parse_args()
     seed = int.from_bytes(os.urandom(4), "big")
@@ -49,10 +49,13 @@ def main():
     excl = {x for x in a.exclude.split(",") if x}
     if a.kind == "problems":
         with open(os.path.join(ROOT, "pool.csv"), encoding="utf-8") as fp:
-            pool = [r["id"] for r in csv.DictReader(fp) if not a.subject or r["subject"] == a.subject]
+            pool = [r["id"] for r in csv.DictReader(fp)]
         cand = [p for p in pool if p not in done_problems() and p not in excl]
         picked = rng.sample(cand, a.n)
         out = picked
+    elif a.kind == "main":
+        cand = [m for m in MAIN if m not in excl]
+        out = picked = rng.sample(cand, a.n)
     else:
         if not a.target:
             sys.exit("--target 필요")
@@ -60,7 +63,7 @@ def main():
                 and (not a.area or a.area in c[1])]
         picked = rng.sample(cand, min(a.n, len(cand)))
         out = [f"{c[0]} [{','.join(sorted(c[1]))}] {c[2]}" for c in picked]
-    log(f"{a.kind} n={a.n} target={a.target} subject={a.subject} area={a.area} exclude={sorted(excl)} seed={seed} pool={len(cand)} -> {[o.split()[0] for o in out]}")
+    log(f"{a.kind} n={a.n} target={a.target} area={a.area} exclude={sorted(excl)} seed={seed} pool={len(cand)} -> {[o.split()[0] for o in out]}")
     print(f"seed={seed} 후보 {len(cand)}개")
     print("\n".join(out))
 
