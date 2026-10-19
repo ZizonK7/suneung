@@ -72,11 +72,13 @@ def main():
                 pairs.append((pid, rng.choice(left)))
         out = [c for _, c in pairs]
         main_card = rng.choice(out)
-        target = "미적분" if any("미적분" in info[c][1] for c in out) else "공통"
-        log(f"cards from={src} exclude={sorted(excl)} seed={seed} -> {out} main={main_card} target={target}")
-        print(f"seed={seed} 목표 {target}, 메인 {main_card}")
+        # 목표 과목은 메인 카드의 영역으로 정한다(D014부터). 허용되지 않는 카드는 뺀다.
+        target = "미적분" if "미적분" in info[main_card][1] else "공통"
+        dropped = [c for c in out if not info[c][1] <= ALLOWED[target]]
+        log(f"cards from={src} exclude={sorted(excl)} seed={seed} -> {out} main={main_card} target={target} dropped={dropped}")
+        print(f"seed={seed} 목표 {target}, 메인 {main_card}" + (f", 영역 밖이라 제외 {dropped}" if dropped else ""))
         for pid, c in pairs:
-            print(f"{pid}: {c} [{','.join(sorted(info[c][1]))}] {info[c][2]}")
+            print(f"{pid}: {c} [{','.join(sorted(info[c][1]))}] {info[c][2]}" + ("  (제외)" if c in dropped else ""))
         return
     elif a.kind == "main":
         cand = [m for m in MAIN if m not in excl]
