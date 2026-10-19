@@ -1,6 +1,7 @@
 """랜덤 추출. 시드와 결과를 draws.log에 남긴다.
 
-  python tools/draw.py problems 5                        # 아직 정리 안 된 기출 문항 5개
+  python tools/draw.py problems 5                        # 아직 정리 안 된 기출 문항 5개 (공통·미적분)
+  python tools/draw.py cards 5 --from 2706_01,2306_19,...  # 정리한 문항마다 카드 1장씩 + 메인 1장 (D009부터)
   python tools/draw.py main 1                            # 제작 문항의 메인 영역(수1/수2/미적분) 1개
   python tools/draw.py logics 1 --target 공통              # 목표 문항에 허용되는 논리 카드 1개
   python tools/draw.py logics 1 --target 미적분 --area 미적분  # 허용 카드 중 미적분 영역 카드에서만 1개
@@ -14,6 +15,7 @@ ALLOWED = {  # 목표 문항 -> 쓸 수 있는 논리 영역
     "확통": {"기초", "확통"},  # 수1·수2 허용 여부 미정
 }
 MAIN = ["수1", "수2", "미적분"]  # 제작 문항의 메인 영역 후보
+SUBJECTS = {"공통", "미적분"}  # 기출 추출 대상 과목 (확통은 당분간 제외)
 
 
 def log(line):
@@ -36,12 +38,19 @@ def cards():
     return out
 
 
+def problem_logics(pid):
+    text = open(os.path.join(ROOT, "problems", f"{pid}.md"), encoding="utf-8").read()
+    m = re.search(r"^logics:\s*\[(.*?)\]", text, re.M)
+    return [x.strip() for x in m.group(1).split(",") if x.strip()] if m else []
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("kind", choices=["problems", "logics", "main"])
+    ap.add_argument("kind", choices=["problems", "logics", "main", "cards"])
     ap.add_argument("n", type=int)
     ap.add_argument("--target", choices=list(ALLOWED))
     ap.add_argument("--exclude", default="", help="쉼표로 구분한 제외 ID")
+    ap.add_argument("--from", dest="src", default="", help="cards: 쉼표로 구분한 정리된 기출 ID")
     ap.add_argument("--area", help="logics: 영역에 이 값이 들어 있는 카드에서만 뽑는다(보장 추출용)")
     a = ap.parse_args()
     seed = int.from_bytes(os.urandom(4), "big")
@@ -49,10 +58,26 @@ def main():
     excl = {x for x in a.exclude.split(",") if x}
     if a.kind == "problems":
         with open(os.path.join(ROOT, "pool.csv"), encoding="utf-8") as fp:
-            pool = [r["id"] for r in csv.DictReader(fp)]
+            pool = [r["id"] for r in csv.DictReader(fp) if r["subject"] in SUBJECTS]
         cand = [p for p in pool if p not in done_problems() and p not in excl]
         picked = rng.sample(cand, a.n)
         out = picked
+    elif a.kind == "cards":
+        info = {c[0]: c for c in cards()}
+        src = [x for x in a.src.split(",") if x]
+        pairs = []  # (기출, 카드) — 같은 카드가 겹치면 그 기출의 다른 카드로 대신한다
+        for pid in src:
+            left = [c for c in problem_logics(pid) if c in info and c not in excl and c not in [q for _, q in pairs]]
+            if left:
+                pairs.append((pid, rng.choice(left)))
+        out = [c for _, c in pairs]
+        main_card = rng.choice(out)
+        target = "미적분" if any("미적분" in info[c][1] for c in out) else "공통"
+        log(f"cards from={src} exclude={sorted(excl)} seed={seed} -> {out} main={main_card} target={target}")
+        print(f"seed={seed} 목표 {target}, 메인 {main_card}")
+        for pid, c in pairs:
+            print(f"{pid}: {c} [{','.join(sorted(info[c][1]))}] {info[c][2]}")
+        return
     elif a.kind == "main":
         cand = [m for m in MAIN if m not in excl]
         out = picked = rng.sample(cand, a.n)
