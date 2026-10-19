@@ -1,7 +1,9 @@
 """랜덤 추출. 시드와 결과를 draws.log에 남긴다.
 
   python tools/draw.py problems 5                        # 아직 정리 안 된 기출 문항 5개 (공통·미적분)
-  python tools/draw.py cards 5 --from 2706_01,2306_19,...  # 정리한 문항마다 카드 1장씩 + 메인 1장 (D009부터)
+  python tools/draw.py deck 5                            # 메인 영역 → 메인 카드 → 나머지 카드, 카드 더미 전체에서 (D015부터)
+  python tools/draw.py deck 5 --main 미적분                # 메인 영역을 정해 두고 뽑기
+  python tools/draw.py cards 5 --from 2706_01,2306_19,...  # 정리한 문항마다 카드 1장씩 + 메인 1장 (D009~D014)
   python tools/draw.py main 1                            # 제작 문항의 메인 영역(수1/수2/미적분) 1개
   python tools/draw.py logics 1 --target 공통              # 목표 문항에 허용되는 논리 카드 1개
   python tools/draw.py logics 1 --target 미적분 --area 미적분  # 허용 카드 중 미적분 영역 카드에서만 1개
@@ -54,12 +56,13 @@ def problem_logics(pid):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("kind", choices=["problems", "logics", "main", "cards"])
+    ap.add_argument("kind", choices=["problems", "logics", "main", "cards", "deck"])
     ap.add_argument("n", type=int)
     ap.add_argument("--target", choices=list(ALLOWED))
     ap.add_argument("--exclude", default="", help="쉼표로 구분한 제외 ID")
     ap.add_argument("--points", type=int, help="problems: 이 배점의 기출에서만 뽑는다(일괄 정리용)")
     ap.add_argument("--from", dest="src", default="", help="cards: 쉼표로 구분한 정리된 기출 ID")
+    ap.add_argument("--main", choices=MAIN, help="deck: 메인 영역을 정해 둔다(없으면 수1/수2/미적분 중 균등)")
     ap.add_argument("--area", help="logics: 영역에 이 값이 들어 있는 카드에서만 뽑는다(보장 추출용)")
     a = ap.parse_args()
     seed = int.from_bytes(os.urandom(4), "big")
@@ -89,6 +92,21 @@ def main():
         print(f"seed={seed} 목표 {target}, 메인 {main_card}" + (f", 영역 밖이라 제외 {dropped}" if dropped else ""))
         for pid, c in pairs:
             print(f"{pid}: {c} [{','.join(sorted(info[c][1]))}] {info[c][2]}" + ("  (제외)" if c in dropped else ""))
+        return
+    elif a.kind == "deck":
+        # 메인 영역을 고르고, 그 영역 카드에서 메인 1장, 목표 과목에 허용되는 카드 전체에서 나머지를 균등하게 뽑는다.
+        main_area = a.main or rng.choice(MAIN)
+        target = "미적분" if main_area == "미적분" else "공통"
+        allowed = [c for c in cards() if c[1] and c[1] <= ALLOWED[target] and c[0] not in excl]
+        mains = [c for c in allowed if main_area in c[1]]
+        main_card = rng.choice(mains)
+        rest = [c for c in allowed if c[0] != main_card[0]]
+        picked = [main_card] + rng.sample(rest, min(a.n - 1, len(rest)))
+        log(f"deck n={a.n} main_area={main_area} target={target} exclude={sorted(excl)} seed={seed} "
+            f"pool={len(allowed)} main_pool={len(mains)} -> {[c[0] for c in picked]} main={main_card[0]}")
+        print(f"seed={seed} 메인 영역 {main_area} → 목표 {target} (메인 후보 {len(mains)}장, 전체 후보 {len(allowed)}장)")
+        for i, c in enumerate(picked):
+            print(f"{'메인 ' if i == 0 else '     '}{c[0]} [{','.join(sorted(c[1]))}] {c[2]}")
         return
     elif a.kind == "main":
         cand = [m for m in MAIN if m not in excl]
