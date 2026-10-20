@@ -1,6 +1,7 @@
 """랜덤 추출. 시드와 결과를 draws.log에 남긴다.
 
   python tools/draw.py problems 5                        # 아직 정리 안 된 기출 문항 5개 (공통·미적분)
+  python tools/draw.py problems 25 --points 4 --also-num 27  # 4점 + 미적분 27번 (일괄 정리 3차부터)
   python tools/draw.py deck 5                            # 메인 영역 → 메인 카드 → 나머지 카드, 카드 더미 전체에서 (D015부터)
   python tools/draw.py deck 5 --main 미적분                # 메인 영역을 정해 두고 뽑기
   python tools/draw.py cards 5 --from 2706_01,2306_19,...  # 정리한 문항마다 카드 1장씩 + 메인 1장 (D009~D014)
@@ -61,6 +62,7 @@ def main():
     ap.add_argument("--target", choices=list(ALLOWED))
     ap.add_argument("--exclude", default="", help="쉼표로 구분한 제외 ID")
     ap.add_argument("--points", type=int, help="problems: 이 배점의 기출에서만 뽑는다(일괄 정리용)")
+    ap.add_argument("--also-num", default="", help="problems: --points와 함께, 배점과 상관없이 이 번호들도 넣는다(쉼표 구분)")
     ap.add_argument("--from", dest="src", default="", help="cards: 쉼표로 구분한 정리된 기출 ID")
     ap.add_argument("--main", choices=MAIN, help="deck: 메인 영역을 정해 둔다(없으면 수1/수2/미적분 중 균등)")
     ap.add_argument("--area", help="logics: 영역에 이 값이 들어 있는 카드에서만 뽑는다(보장 추출용)")
@@ -69,11 +71,12 @@ def main():
     rng = random.Random(seed)
     excl = {x for x in a.exclude.split(",") if x}
     if a.kind == "problems":
+        also = {int(x) for x in a.also_num.split(",") if x}
         with open(os.path.join(ROOT, "pool.csv"), encoding="utf-8") as fp:
             pool = [r["id"] for r in csv.DictReader(fp) if r["subject"] in SUBJECTS
-                    and (not a.points or points(r) == a.points)]
+                    and (not a.points or points(r) == a.points or int(r["num"]) in also)]
         cand = [p for p in pool if p not in done_problems() and p not in excl]
-        picked = rng.sample(cand, a.n)
+        picked = rng.sample(cand, min(a.n, len(cand)))
         out = picked
     elif a.kind == "cards":
         info = {c[0]: c for c in cards()}
@@ -118,7 +121,7 @@ def main():
                 and (not a.area or a.area in c[1])]
         picked = rng.sample(cand, min(a.n, len(cand)))
         out = [f"{c[0]} [{','.join(sorted(c[1]))}] {c[2]}" for c in picked]
-    log(f"{a.kind} n={a.n} target={a.target} area={a.area} points={a.points} exclude={sorted(excl)} seed={seed} pool={len(cand)} -> {[o.split()[0] for o in out]}")
+    log(f"{a.kind} n={a.n} target={a.target} area={a.area} points={a.points}{f" also_num={sorted(also)}" if a.kind == "problems" and also else ""} exclude={sorted(excl)} seed={seed} pool={len(cand)} -> {[o.split()[0] for o in out]}")
     print(f"seed={seed} 후보 {len(cand)}개")
     print("\n".join(out))
 
